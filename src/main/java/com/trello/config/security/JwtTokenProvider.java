@@ -18,17 +18,19 @@ public class JwtTokenProvider {
     private long jwtExpiration;
 
     // Refresh token expiration: 30 days = 2592000 seconds = 2592000000 ms
-    private static final long REFRESH_TOKEN_EXPIRATION = 30 * 24 * 60 * 60 * 1000;
+    private static final long REFRESH_TOKEN_EXPIRATION = 30L * 24 * 60 * 60 * 1000;
 
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
-    public String generateAccessToken(String username) {
+    public String generateAccessToken(String userId, String role) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + jwtExpiration);
+        // jwtExpiration is in seconds from properties, convert to milliseconds
+        Date expiryDate = new Date(now.getTime() + (jwtExpiration * 1000));
         return Jwts.builder()
-                .subject(username)
+                .subject(userId)
+                .claim("role", role)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())

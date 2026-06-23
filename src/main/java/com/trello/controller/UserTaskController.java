@@ -17,7 +17,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -83,12 +85,16 @@ public class UserTaskController {
     }
 
     /**
-     * GET /api/tasks - Lấy danh sách công việc được giao cho user hiện tại
+     * GET /api/tasks - Lấy danh sách công việc được giao cho user hiện tại với pagination
      * @param status Optional: filter by status (TODO, DOING, DONE)
+     * @param page Trang hiện tại (0-based, mặc định: 0)
+     * @param size Số lượng bản ghi trên trang (mặc định: 30)
      */
     @GetMapping
-    public ResponseEntity<ApiResponse<?>> getUserTasks(Authentication authentication, 
-            @RequestParam(required = false) String status) {
+    public ResponseEntity<ApiResponse<?>> getUserTasks(Authentication authentication,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size) {
         try {
             Long userId = extractUserId(authentication);
             if (userId == null) {
@@ -105,11 +111,31 @@ public class UserTaskController {
                         .collect(Collectors.toList());
             }
             
-            List<TaskResponse> responses = tasks.stream().map(this::convertToResponse).collect(Collectors.toList());
+            // Pagination logic
+            int totalElements = tasks.size();
+            int totalPages = (int) Math.ceil((double) totalElements / size);
+            int fromIndex = page * size;
+            int toIndex = Math.min(fromIndex + size, totalElements);
+            
+            List<Task> paginatedTasks;
+            if (fromIndex >= totalElements) {
+                paginatedTasks = List.of();
+            } else {
+                paginatedTasks = tasks.subList(fromIndex, toIndex);
+            }
+            
+            List<TaskResponse> responses = paginatedTasks.stream().map(this::convertToResponse).collect(Collectors.toList());
+            
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("content", responses);
+            responseData.put("page", page);
+            responseData.put("size", size);
+            responseData.put("totalElements", totalElements);
+            responseData.put("totalPages", totalPages);
 
             return new ResponseEntity<>(ApiResponse.builder()
                     .success(true).message("Lấy danh sách công việc thành công")
-                    .statusCode(HttpStatus.OK.value()).data(responses).build(), HttpStatus.OK);
+                    .statusCode(HttpStatus.OK.value()).data(responseData).build(), HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(ApiResponse.builder()
                     .success(false).message("Lỗi: " + e.getMessage())

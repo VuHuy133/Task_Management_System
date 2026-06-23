@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 
 @Service
 @RequiredArgsConstructor
@@ -102,6 +104,37 @@ public class ProjectService {
     public List<Project> getProjectsOwnedByUser(Long userId) {
         User owner = userService.getUserById(userId);
         return projectRepository.findByOwner(owner);
+    }
+
+    /**
+     * Get projects that user has joined (owned or is member of)
+     * Used for JOINED, JOINED_PUBLIC, JOINED_PRIVATE filters
+     */
+    @Transactional(readOnly = true)
+    public List<Project> getProjectsOwnedOrJoinedByUser(Long userId) {
+        User user = userService.getUserById(userId);
+        
+        // Get all projects where user is owner
+        List<Project> ownedProjects = projectRepository.findByOwner(user);
+        Set<Long> projectIds = new java.util.HashSet<>();
+        for (Project p : ownedProjects) {
+            projectIds.add(p.getId());
+        }
+        
+        // Get all projects where user is a member
+        List<Project> memberProjects = projectMemberRepository.findByUser(user).stream()
+                .map(ProjectMember::getProject)
+                .toList();
+        
+        List<Project> result = new java.util.ArrayList<>(ownedProjects);
+        for (Project p : memberProjects) {
+            if (!projectIds.contains(p.getId())) {
+                result.add(p);
+                projectIds.add(p.getId());
+            }
+        }
+        
+        return result;
     }
 
 	/**

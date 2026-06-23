@@ -1,90 +1,71 @@
 # Trello Mini - Project Management System
 
-A mini Trello-like project management system built with Spring Boot, Spring Security, JWT, MySQL, and Redis.
+A project management platform built with Spring Boot backend and React frontend.
 
-## Features
+## Frontend
 
-- **User Authentication**: JWT-based authentication with login and registration
-- **Project Management**: Create, read, update, and delete projects
-- **Task Management**: Create and manage tasks within projects with priority and status tracking
-- **Task Comments**: Add comments to tasks for collaboration
-- **Project Members**: Manage project team members with roles
-- **Task Attachments**: Upload and manage task attachments
-- **Caching**: Redis integration for improved performance
-- **Docker Support**: Full Docker and Docker Compose setup
+This is the React frontend built with Vite.
 
-## Technology Stack
+### Available Scripts
 
-- **Backend**: Java Spring Boot 4.0.3
-- **JDK**: Java 17
-- **Database**: MySQL 8.0
-- **Cache**: Redis 7-alpine
-- **Authentication**: Spring Security + JWT (jjwt 0.12.3)
-- **ORM**: Spring Data JPA with Hibernate 7.2.4
-- **Build Tool**: Maven 3.9.6
-- **Code Simplification**: Lombok 1.18.42
-- **Containerization**: Docker + Docker Compose
+In the `frontend` directory, you can run:
 
-## Project Structure
+### `npm install`
 
-```
-src/main/java/com/trello/
-├── config/           # Configuration classes
-├── controller/       # REST API controllers
-├── dto/              # Data Transfer Objects
-├── entity/           # JPA entities
-├── mapper/           # DTO mappers
-├── repository/       # Spring Data JPA repositories
-├── service/          # Business logic services
-└── security/         # JWT token provider
-```
+Install all project dependencies.
 
-## Database Schema
+### `npm run dev`
 
-### Entities
+Runs the app in development mode.\
+Open [http://localhost:5173](http://localhost:5173) to view it in your browser.
 
-1. **User**: Authentication and user information
-   - id, username, email, password, role, createdAt
+The page will reload when you make changes.
 
-2. **Project**: Project information
-   - id, name, description, ownerId, createdAt, updatedAt
+### `npm run build`
 
-3. **ProjectMember**: Project team members
-   - id, projectId, userId, role, joinedAt
+Builds the app for production to the `dist` folder.\
+It correctly bundles React in production mode and optimizes the build for the best performance.
 
-4. **Task**: Project tasks
-   - id, projectId, title, description, priority, status, assigneeId, dueDate, createdAt, updatedAt
+Your app is ready to be deployed!
 
-5. **TaskComment**: Task comments
-   - id, taskId, userId, content, createdAt
+## Backend
 
-6. **TaskAttachment**: Task attachments/files
-   - id, taskId, filename, uploadedById, createdAt
+This is the Spring Boot backend REST API.
 
-## Prerequisites
+### Prerequisites
 
-- Docker and Docker Compose installed
-- OR
 - JDK 17+
-- MySQL 8.0+
-- Redis 7+
+- Maven 3.9.6+
+- MySQL 8.0+ (running)
+- Redis 7+ (running)
 
-## Getting Started
+### Installation
 
-### Option 1: Using Docker Compose (Recommended)
+In the project root directory, you can run:
 
-1. Navigate to the project directory:
+### `mvnw clean package`
+
+Build the backend project.
+
+### `mvnw spring-boot:run`
+
+Runs the backend server.\
+The server will start at [http://localhost:8088](http://localhost:8088)
+
+## Docker (Recommended)
+
+The easiest way to run the complete application:
+
 ```bash
-cd Trello_mini
+docker compose up -d
 ```
 
-2. Start the application with Docker Compose:
-```bash
-docker-compose up -d
-```
+Services will be available at:
+- Frontend: http://localhost:3000
+- Backend: http://localhost:8088
 
-The application will be available at `http://localhost:3000`
 
+<<<<<<< HEAD
 
 
 Redis will run on `localhost:6379`
@@ -96,6 +77,8 @@ Redis will run on `localhost:6379`
 2. Update `application.properties` with your MySQL and Redis connection details:
 ```properties
 
+=======
+>>>>>>> d7e30d9 (Update code 4)
 
 3. Build the project:
 ```bash

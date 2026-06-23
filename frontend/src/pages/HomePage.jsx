@@ -9,12 +9,16 @@ export default function HomePage() {
   const [projects, setProjects] = useState([])
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     Promise.all([
       axiosInstance.get('/projects').catch(() => ({ data: { data: [] } })),
     ]).then(([projRes]) => {
-      setProjects(projRes.data.data || [])
+      const responseData = projRes.data.data
+      // Handle both old format (array) and new pagination format (object with content)
+      const projectsList = Array.isArray(responseData) ? responseData : (responseData?.content || [])
+      setProjects(projectsList)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -24,6 +28,10 @@ export default function HomePage() {
   }
 
   const initials = (name) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U'
+
+  const filteredProjects = projects.filter(p =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  )
 
   return (
     <>
@@ -143,14 +151,14 @@ export default function HomePage() {
             <i className="fas fa-home"></i> Dashboard
           </Link>
           <Link to="/projects" className="s-link">
-            <i className="fas fa-project-diagram"></i> Projects
+            <i className="fas fa-project-diagram"></i> Dự án 
           </Link>
           <Link to="/tasks" className="s-link">
-            <i className="fas fa-tasks"></i> Tasks
+            <i className="fas fa-tasks"></i> Công việc
           </Link>
           <div className="nav-label">Account</div>
           <Link to="/profile" className="s-link">
-            <i className="fas fa-user"></i> Profile
+            <i className="fas fa-user"></i> Hồ sơ
           </Link>
         </div>
 
@@ -227,8 +235,25 @@ export default function HomePage() {
 
           {/* Projects */}
           <div className="sec-card">
-            <div className="sec-title">
-              <span><i className="fas fa-project-diagram me-2 text-primary"></i>My Projects</span>
+            <div className="sec-title" style={{ gap: 12, alignItems: 'center' }}>
+              <span><i className="fas fa-project-diagram me-2 text-primary"></i>All Projects</span>
+              <input
+                type="text"
+                placeholder="Find project..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  flex: '0 1 200px',
+                  padding: '6px 10px',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  outline: 'none',
+                  transition: 'border-color .15s'
+                }}
+                onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
+                onBlur={(e) => e.target.style.borderColor = 'var(--border)'}  
+              />
               <Link to="/projects" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
                 See all →
               </Link>
@@ -238,6 +263,11 @@ export default function HomePage() {
               <p className="text-muted" style={{ fontSize: 13 }}>
                 <i className="fas fa-spinner fa-spin me-2"></i>Loading...
               </p>
+            ) : filteredProjects.length === 0 && searchTerm ? (
+              <div className="text-center py-4">
+                <i className="fas fa-search fa-2x text-muted mb-2"></i>
+                <p className="text-muted" style={{ fontSize: 13 }}>No projects match your search.</p>
+              </div>
             ) : projects.length === 0 ? (
               <div className="text-center py-4">
                 <i className="fas fa-folder-open fa-2x text-muted mb-2"></i>
@@ -248,7 +278,7 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="proj-grid">
-                {projects.map((p) => (
+                {filteredProjects.map((p) => (
                   <Link to={`/projects/${p.id}`} key={p.id} className="proj-card">
                     <h6>{p.name}</h6>
                     <span style={{

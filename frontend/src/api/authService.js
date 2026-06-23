@@ -6,29 +6,32 @@ import axiosInstance from './axiosInstance'
 export const register = (data) => axiosInstance.post('/auth/register', data)
 
 /**
- * Đăng nhập - trả về { accessToken, refreshToken, user }
+ * Đăng nhập - API + Session
+ * Server trả access token trong body + set refresh token vào httpOnly Cookie (Session)
  */
 export const login = async (email, password) => {
   const res = await axiosInstance.post('/auth/login', { email, password })
-  const { accessToken, refreshToken, user } = res.data.data
+  const { accessToken, user } = res.data.data
 
-  // Lưu token vào localStorage (stateless)
+  // Chỉ lưu access token và user info (refresh token do server quản lý qua httpOnly Cookie)
   localStorage.setItem('accessToken', accessToken)
-  localStorage.setItem('refreshToken', refreshToken)
   localStorage.setItem('user', JSON.stringify(user))
 
   return user
 }
 
 /**
- * Đăng xuất - blacklist token trên server rồi xóa localStorage
+ * Đăng xuất - Session
+ * Gọi API logout: server xóa httpOnly Cookie và blacklist tokens
+ * Browser tự động gửi Cookie (withCredentials: true trong axiosInstance)
  */
 export const logout = async () => {
-  const refreshToken = localStorage.getItem('refreshToken')
   try {
-    await axiosInstance.post(`/auth/logout?refreshToken=${refreshToken}`)
+    await axiosInstance.post('/auth/logout')
   } finally {
-    localStorage.clear()
+    // Xóa access token và user info khỏi localStorage
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('user')
   }
 }
 

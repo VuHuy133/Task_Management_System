@@ -11,7 +11,7 @@ services:
       - "3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password --skip-name-resolve
+    command: --default-authentication-plugin=mysql_native_password --skip-name-resolve --bind-address=0.0.0.0
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
       timeout: 10s
@@ -68,9 +68,18 @@ services:
       SPRING_DEVTOOLS_RESTART_ENABLED: "true"
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
-      JWT_SECRET: ${JWT_SECRET}
+      SPRING_JWT_SECRET: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      # Startup Runner Configuration - reset password or seed data
+      # Set to "true" to enable DataSeederService and ApplicationStartupRunner on startup
+      APP_STARTUP_ENABLED: ${APP_STARTUP_ENABLED:-false}
+      # Reset password option - only works if APP_STARTUP_ENABLED=true
+      RESET_PASSWORD: ${RESET_PASSWORD:-false}
+      RESET_PASSWORD_VALUE: ${RESET_PASSWORD_VALUE:-123456}
+      # Seed data on startup (only seeds if DB is empty - safe to keep true)
+      # Set to "false" to disable auto-seeding
+      SEED_DATA_ON_STARTUP: ${SEED_DATA_ON_STARTUP:-true}
     ports:
       - "8088:8088"
     depends_on:

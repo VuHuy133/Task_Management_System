@@ -24,25 +24,41 @@ public class TokenBlacklistService {
     /** Lưu token vào Redis sau khi login thành công.
      *  Key: auth:active:{userId}  →  Value: token */
     public void saveActiveToken(String token, String userId, long ttlSeconds) {
+        if (token == null || userId == null) {
+            log.error("saveActiveToken: token or userId is null - token={}, userId={}", token, userId);
+            return;
+        }
+        
         try {
-            if (token != null && token.startsWith("Bearer ")) {
+            if (token.startsWith("Bearer ")) {
                 token = token.substring(7);
             }
-            log.info("saveActiveToken called - userId: {}, ttlSeconds: {}", userId, ttlSeconds);
-
+            
             if (ttlSeconds <= 0) {
-                ttlSeconds = 86400;
+                ttlSeconds = 86400; // Default 24 hours
                 log.warn("TTL invalid, using default 86400s");
             }
 
-            // Key theo userId để dễ tra cứu và đảm bảo single session
-            String key = ACTIVE_PREFIX + userId;
-            stringRedisTemplate.opsForValue()
-                    .set(key, token, ttlSeconds, TimeUnit.SECONDS);
-
-            log.info("Token saved successfully - key: {}, ttl: {}s", key, ttlSeconds);
+            String key = "auth:active:" + userId;
+            
+            // Ensure Redis template is available
+            if (stringRedisTemplate == null) {
+                log.error("StringRedisTemplate is NULL - cannot save token to Redis");
+                return;
+            }
+            
+            // Save to Redis synchronously
+            stringRedisTemplate.opsForValue().set(key, token, ttlSeconds, java.util.concurrent.TimeUnit.SECONDS);
+            
+            // Verify immediately
+            String saved = stringRedisTemplate.opsForValue().get(key);
+            if (saved != null && saved.length() > 0) {
+                log.info("✓ Token saved successfully to Redis - key: {}, ttl: {}s", key, ttlSeconds);
+            } else {
+                log.error("✗ Token NOT found in Redis after save - key: {}", key);
+            }
         } catch (Exception e) {
-            log.error("Error saving active token: {}", e.getMessage(), e);
+            log.error("CRITICAL ERROR in saveActiveToken: {}", e.getMessage(), e);
         }
     }
 
@@ -131,12 +147,28 @@ public class TokenBlacklistService {
             }
 
             String key = REFRESH_PREFIX + userId;
+            log.info("Attempting to save refresh token to Redis with key: {}", key);
+            
+            if (stringRedisTemplate == null) {
+                log.error("StringRedisTemplate is NULL - Redis not properly configured!");
+                return;
+            }
+            
             stringRedisTemplate.opsForValue()
                     .set(key, refreshToken, ttlSeconds, TimeUnit.SECONDS);
 
             log.info("Refresh token saved successfully - key: {}, ttl: {}s", key, ttlSeconds);
+            
+            // Verify token was saved
+            String savedToken = stringRedisTemplate.opsForValue().get(key);
+            if (savedToken != null) {
+                log.info("✓ Refresh token verified in Redis - key: {}", key);
+            } else {
+                log.error("✗ Refresh token NOT found in Redis after save - key: {}", key);
+            }
         } catch (Exception e) {
             log.error("Error saving refresh token: {}", e.getMessage(), e);
+            e.printStackTrace();
         }
     }
 

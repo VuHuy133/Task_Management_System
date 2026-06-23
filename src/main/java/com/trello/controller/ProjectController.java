@@ -11,6 +11,8 @@ import com.trello.service.ProjectService;
 import com.trello.service.ProjectMemberService;
 import com.trello.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,7 +20,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -63,10 +69,16 @@ public class ProjectController {
     }
 
     /**
-     * GET /api/projects - Lấy danh sách dự án của User hiện tại
+     * GET /api/projects - Lấy danh sách dự án của User hiện tại với pagination và lọc
+     * @param page Trang hiện tại (0-based, mặc định: 0)
+     * @param size Số lượng bản ghi trên trang (mặc định: 30)
+     * @param filterType Loại lọc: ALL (tất cả + public), JOINED (chỉ đã tham gia), JOINED_PUBLIC (public đã tham gia), JOINED_PRIVATE (private đã tham gia)
      */
     @GetMapping
-    public ResponseEntity<ApiResponse<?>> getUserProjects(Authentication authentication) {
+    public ResponseEntity<ApiResponse<?>> getUserProjects(Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size,
+            @RequestParam(defaultValue = "ALL") String filterType) {
         try {
             Long userId = extractUserId(authentication);
             if (userId == null) {
@@ -81,20 +93,87 @@ public class ProjectController {
                 .anyMatch(a -> "ROLE_ADMIN".equalsIgnoreCase(a.getAuthority()) || "ADMIN".equalsIgnoreCase(a.getAuthority()));
 
             List<Project> projects;
+            
+            // Lấy danh sách dự án theo loại lọc
             if (isAdmin) {
                 projects = projectService.getAllProjects();
             } else {
-                projects = projectService.getProjectsByUserId(userId);
+                List<Project> joinedProjects = projectService.getProjectsByUserId(userId);
+                
+                if ("ALL".equalsIgnoreCase(filterType)) {
+                    // Tất cả dự án đã tham gia + tất cả public projects
+                    Set<Long> joinedProjectIds = joinedProjects.stream()
+                        .map(Project::getId)
+                        .collect(Collectors.toSet());
+                    
+                    projects = new ArrayList<>(joinedProjects);
+                    
+                    // Thêm tất cả public projects mà user chưa tham gia
+                    List<Project> allPublicProjects = projectService.getAllProjects().stream()
+                        .filter(p -> "PUBLIC".equalsIgnoreCase(p.getType()))
+                        .filter(p -> !joinedProjectIds.contains(p.getId()))
+                        .collect(Collectors.toList());
+                    
+                    projects.addAll(allPublicProjects);
+                } else if ("JOINED".equalsIgnoreCase(filterType)) {
+                    // Chỉ dự án đã tham gia (owned or member)
+                    projects = projectService.getProjectsOwnedOrJoinedByUser(userId);
+                } else if ("JOINED_PUBLIC".equalsIgnoreCase(filterType)) {
+                    // Dự án public mà đã tham gia (owned or member)
+                    projects = projectService.getProjectsOwnedOrJoinedByUser(userId).stream()
+                        .filter(p -> "PUBLIC".equalsIgnoreCase(p.getType()))
+                        .collect(Collectors.toList());
+                } else if ("JOINED_PRIVATE".equalsIgnoreCase(filterType)) {
+                    // Dự án private mà đã tham gia (owned or member)
+                    projects = projectService.getProjectsOwnedOrJoinedByUser(userId).stream()
+                        .filter(p -> "PRIVATE".equalsIgnoreCase(p.getType()))
+                        .collect(Collectors.toList());
+                } else {
+                    // Mặc định là ALL
+                    Set<Long> joinedProjectIds = joinedProjects.stream()
+                        .map(Project::getId)
+                        .collect(Collectors.toSet());
+                    
+                    projects = new ArrayList<>(joinedProjects);
+                    
+                    List<Project> allPublicProjects = projectService.getAllProjects().stream()
+                        .filter(p -> "PUBLIC".equalsIgnoreCase(p.getType()))
+                        .filter(p -> !joinedProjectIds.contains(p.getId()))
+                        .collect(Collectors.toList());
+                    
+                    projects.addAll(allPublicProjects);
+                }
             }
-            List<ProjectResponse> projectResponses = projects.stream()
+            
+            // Pagination logic
+            int totalElements = projects.size();
+            int totalPages = (int) Math.ceil((double) totalElements / size);
+            int fromIndex = page * size;
+            int toIndex = Math.min(fromIndex + size, totalElements);
+            
+            List<Project> paginatedProjects;
+            if (fromIndex >= totalElements) {
+                paginatedProjects = List.of();
+            } else {
+                paginatedProjects = projects.subList(fromIndex, toIndex);
+            }
+            
+            List<ProjectResponse> projectResponses = paginatedProjects.stream()
                     .map(p -> convertToResponse(p, userId))
                     .collect(Collectors.toList());
+
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("content", projectResponses);
+            responseData.put("page", page);
+            responseData.put("size", size);
+            responseData.put("totalElements", totalElements);
+            responseData.put("totalPages", totalPages);
 
             ApiResponse<?> response = ApiResponse.builder()
                     .success(true)
                     .message("Lấy danh sách dự án thành công")
                     .statusCode(HttpStatus.OK.value())
-                    .data(projectResponses)
+                    .data(responseData)
                     .build();
 
             return new ResponseEntity<>(response, HttpStatus.OK);

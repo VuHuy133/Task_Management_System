@@ -20,14 +20,11 @@ public class SecurityConfig {
     private JwtAuthenticationFilter jwtAuthenticationFilter;
     @Autowired
     private JwtAuthenticationEntryPoint unauthorizedHandler;
-    @Autowired
-    private OAuth2AuthenticationSuccessHandler oauth2SuccessHandler;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            // STATELESS: không tạo hoặc sử dụng HTTP session
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 // Public API auth endpoints
@@ -39,17 +36,14 @@ public class SecurityConfig {
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 // All other /api/** require JWT authentication
                 .requestMatchers("/api/**").authenticated()
-                // Non-API requests are permitted (static resources, OAuth2 redirect, etc.)
+                // Non-API requests are permitted (static resources, etc.)
                 .anyRequest().permitAll()
             )
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint(unauthorizedHandler)
-            )
-            .oauth2Login(oauth2 -> oauth2
-                .successHandler(oauth2SuccessHandler)
             );
 
-        // Đặt JWT filter trước UsernamePasswordAuthenticationFilter
+        // Add JWT filter before UsernamePasswordAuthenticationFilter
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

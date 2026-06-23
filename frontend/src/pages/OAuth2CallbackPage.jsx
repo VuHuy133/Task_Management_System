@@ -3,8 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 
 /**
  * Trang callback sau khi đăng nhập OAuth2 (Google).
- * Backend redirect về: /oauth2/callback?token=<jwt>&refreshToken=<refresh>
- * Trang này lưu token vào localStorage rồi redirect về /home.
+ * Backend redirect về: /oauth2/callback?token=<jwt>&refreshToken=<refresh>&email=<email>&name=<name>&role=<role>&id=<id>
+ * Trang này lưu token + user info vào localStorage rồi redirect về home.
  */
 export default function OAuth2CallbackPage() {
   const [searchParams] = useSearchParams()
@@ -13,16 +13,37 @@ export default function OAuth2CallbackPage() {
   useEffect(() => {
     const token = searchParams.get('token')
     const refreshToken = searchParams.get('refreshToken')
+    const email = searchParams.get('email')
+    const username = searchParams.get('username')
+    const name = searchParams.get('name')
+    const role = searchParams.get('role')
+    const id = searchParams.get('id')
 
     if (token) {
+      // Lưu access token
       localStorage.setItem('accessToken', token)
+      
+      // Lưu refresh token nếu có
       if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]))
-        localStorage.setItem('user', JSON.stringify({ id: payload.sub }))
-      } catch {
-        // Ignore decode errors
+      
+      // Lưu user info từ query params
+      const userInfo = {
+        id: id || ((() => {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]))
+            return payload.sub
+          } catch {
+            return null
+          }
+        })()),
+        email: email,
+        username: username,
+        name: name,
+        role: role
       }
+      localStorage.setItem('user', JSON.stringify(userInfo))
+      
+      console.log('✓ OAuth2 callback stored:', userInfo)
       navigate('/', { replace: true })
     } else {
       navigate('/login?error=oauth2_failed', { replace: true })

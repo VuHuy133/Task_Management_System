@@ -229,7 +229,7 @@ export default function ProjectDetailPage() {
   )
 
   const KanbanColumn = ({ title, color, tasks: colTasks, status }) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{
         background: color,
         borderRadius: '8px 8px 0 0',
@@ -250,36 +250,50 @@ export default function ProjectDetailPage() {
             {...provided.droppableProps}
             style={{
               background: snapshot.isDraggingOver ? '#f0f4ff' : '#f8f9fa',
-              borderRadius: '0 0 8px 8px',
               padding: '12px',
               minHeight: '200px',
+              maxHeight: '400px',
+              overflow: 'auto',
               transition: 'background-color 0.2s',
+              flex: 1,
             }}
           >
             {colTasks.map((task, index) => (
               <TaskCard key={task.id} task={task} index={index} />
             ))}
             {provided.placeholder}
-            {(isMember || isAdmin) && (
-              <Link
-                to={'/tasks/create?projectId=' + id + '&status=' + status}
-                style={{
-                  display: 'block',
-                  textAlign: 'center',
-                  padding: '8px',
-                  border: '2px dashed #d1d5db',
-                  borderRadius: '6px',
-                  color: '#666',
-                  fontSize: '13px',
-                  textDecoration: 'none',
-                }}
-              >
-                + Them cong viec
-              </Link>
-            )}
           </div>
         )}
       </Droppable>
+      {(isMember || isAdmin) && (
+        <Link
+          to={'/tasks/create?projectId=' + id + '&status=' + status}
+          style={{
+            display: 'block',
+            textAlign: 'center',
+            padding: '12px',
+            border: '2px dashed #d1d5db',
+            borderRadius: '0 0 8px 8px',
+            color: '#666',
+            fontSize: '13px',
+            textDecoration: 'none',
+            background: '#f8f9fa',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.borderColor = '#667eea'
+            e.target.style.color = '#667eea'
+            e.target.style.background = '#f0f4ff'
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.borderColor = '#d1d5db'
+            e.target.style.color = '#666'
+            e.target.style.background = '#f8f9fa'
+          }}
+        >
+          + Them cong viec
+        </Link>
+      )}
     </div>
   )
 
@@ -342,16 +356,47 @@ export default function ProjectDetailPage() {
       <div className="page-container">
         <div className="project-header">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-            <div>
+            <div style={{ flex: 1, minWidth: '300px' }}>
               <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>{project.name}</h1>
               <p style={{ color: '#666', fontSize: '14px', marginBottom: '12px' }}>{project.description || 'Khong co mo ta'}</p>
               <span style={{
                 background: project.type === 'PUBLIC' ? '#e0e7ff' : '#fef2f2',
                 color: project.type === 'PUBLIC' ? '#1d4ed8' : '#991b1b',
-                fontSize: '12px', padding: '3px 10px', borderRadius: '12px', fontWeight: 600,
+                fontSize: '12px', padding: '3px 10px', borderRadius: '12px', fontWeight: 600, marginBottom: '12px', display: 'inline-block',
               }}>
                 {project.type === 'PUBLIC' ? 'Public' : 'Private'}
               </span>
+
+              {/* Progress Bar */}
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#333' }}>
+                    <i className="fas fa-chart-pie" style={{ marginRight: '6px', color: '#667eea' }}></i>
+                    Tien do hoan thanh
+                  </span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#667eea' }}>
+                    {totalCount === 0 ? '0%' : Math.round((doneCount / totalCount) * 100) + '%'}
+                  </span>
+                </div>
+                <div style={{
+                  width: '100%',
+                  height: '8px',
+                  background: '#e5e7eb',
+                  borderRadius: '4px',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: totalCount === 0 ? '0%' : (doneCount / totalCount) * 100 + '%',
+                    background: doneCount === totalCount && totalCount > 0 ? '#22c55e' : '#667eea',
+                    transition: 'width 0.3s ease',
+                    borderRadius: '4px',
+                  }}></div>
+                </div>
+                <div style={{ marginTop: '6px', fontSize: '12px', color: '#666' }}>
+                  {doneCount} / {totalCount} cong viec hoan thanh
+                </div>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <div className="stat-pill"><i className="fas fa-tasks"></i> {totalCount} cong viec</div>

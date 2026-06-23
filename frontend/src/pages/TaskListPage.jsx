@@ -20,23 +20,101 @@ export default function TaskListPage() {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('ALL')
+  const [page, setPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalElements, setTotalElements] = useState(0)
 
   useEffect(() => {
-    loadTasks()
+    setPage(0)
+    loadTasks(0)
   }, [filterStatus])
 
-  const loadTasks = async () => {
+  useEffect(() => {
+    loadTasks(page)
+  }, [page])
+
+  const loadTasks = async (pageNum) => {
     try {
       setLoading(true)
-      const params = {}
+      const params = { page: pageNum, size: 30 }
       if (filterStatus !== 'ALL') params.status = filterStatus
       const res = await taskService.getTasks(params)
-      setTasks(res.data || [])
+      const data = res.data
+      if (data && data.content) {
+        setTasks(data.content)
+        setTotalPages(data.totalPages)
+        setTotalElements(data.totalElements)
+      } else {
+        setTasks([])
+      }
     } catch (err) {
       console.error('Failed to load tasks', err)
     } finally {
       setLoading(false)
     }
+  }
+
+  const goToPage = (pageNum) => {
+    setPage(pageNum)
+  }
+
+  const renderPaginationButtons = () => {
+    if (totalPages <= 1) return null
+    
+    const buttons = []
+    const maxButtons = 5
+    let startPage = Math.max(0, page - Math.floor(maxButtons / 2))
+    let endPage = Math.min(totalPages - 1, startPage + maxButtons - 1)
+    
+    if (endPage - startPage < maxButtons - 1) {
+      startPage = Math.max(0, endPage - maxButtons + 1)
+    }
+    
+    buttons.push(
+      <button key="first" onClick={() => goToPage(0)} style={{ ...paginationBtn, cursor: 'pointer' }}>«</button>
+    )
+    
+    if (startPage > 0) {
+      buttons.push(<span key="dots1" style={{ ...paginationBtn, cursor: 'default' }}>...</span>)
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      buttons.push(
+        <button
+          key={i}
+          onClick={() => goToPage(i)}
+          style={{
+            ...paginationBtn,
+            background: page === i ? '#3b82f6' : '#ffffff',
+            color: page === i ? '#ffffff' : '#1e293b',
+            borderColor: page === i ? '#3b82f6' : '#e2e8f0',
+            cursor: 'pointer'
+          }}
+        >
+          {i + 1}
+        </button>
+      )
+    }
+    
+    if (endPage < totalPages - 1) {
+      buttons.push(<span key="dots2" style={{ ...paginationBtn, cursor: 'default' }}>...</span>)
+    }
+    
+    buttons.push(
+      <button key="last" onClick={() => goToPage(totalPages - 1)} style={{ ...paginationBtn, cursor: 'pointer' }}>»</button>
+    )
+    
+    return buttons
+  }
+
+  const paginationBtn = {
+    padding: '8px 12px',
+    border: '2px solid #3b82f6',
+    borderRadius: '8px',
+    fontSize: '13px',
+    background: '#ffffff',
+    color: '#1e293b',
+    margin: '0 2px'
   }
 
   return (
@@ -78,6 +156,8 @@ export default function TaskListPage() {
         .b-status, .b-priority { font-size: 11px; padding: 2px 8px; border-radius: 6px; display: inline-block; }
         .empty-state { text-align: center; padding: 40px 20px; }
         .empty-state i { font-size: 3rem; color: var(--muted); margin-bottom: 16px; }
+        .pagination-container { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 20px; }
+        .pagination-btn { padding: 8px 12px; border: 2px solid #3b82f6; border-radius: 8px; font-size: 13px; cursor: pointer; background: #ffffff; color: #1e293b; }
       `}</style>
 
       <Sidebar isAdmin={false} />
@@ -95,7 +175,7 @@ export default function TaskListPage() {
 
           <div className="filters">
             <button className={`filter-btn ${filterStatus === 'ALL' ? 'active' : ''}`} onClick={() => setFilterStatus('ALL')}>
-              Tất cả ({tasks.length})
+              Tất cả ({totalElements})
             </button>
             <button className={`filter-btn ${filterStatus === 'TODO' ? 'active' : ''}`} onClick={() => setFilterStatus('TODO')}>
               <i className="fas fa-circle-notch me-1"></i> Chưa bắt đầu
@@ -121,46 +201,54 @@ export default function TaskListPage() {
               </Link>
             </div>
           ) : (
-            <div className="sec-card">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Công việc</th>
-                    <th>Dự án</th>
-                    <th>Trạng thái</th>
-                    <th>Độ ưu tiên</th>
-                    <th>Hạn chót</th>
-                    <th style={{ textAlign: 'right' }}>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tasks.map((task) => {
-                    const status = statusBadges[task.status] || statusBadges.TODO
-                    const priority = priorityBadges[task.priority] || priorityBadges.MEDIUM
-                    return (
-                      <tr key={task.id}>
-                        <td><Link to={`/tasks/${task.id}`} style={{ textDecoration: 'none', color: 'inherit', fontWeight: 600 }}>{task.title}</Link></td>
-                        <td>{task.project?.name || '-'}</td>
-                        <td>
-                          <span className="b-status" style={{ background: status.bg, color: status.color }}>
-                            {status.text}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="b-priority" style={{ background: priority.bg, color: priority.color }}>
-                            {priority.text}
-                          </span>
-                        </td>
-                        <td>{task.dueDate ? new Date(task.dueDate).toLocaleDateString('vi-VN') : '-'}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <Link to={`/tasks/${task.id}`} className="btn btn-sm btn-outline-primary" style={{ fontSize: '12px' }}>Xem</Link>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="sec-card">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Công việc</th>
+                      <th>Dự án</th>
+                      <th>Trạng thái</th>
+                      <th>Độ ưu tiên</th>
+                      <th>Hạn chót</th>
+                      <th style={{ textAlign: 'right' }}>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tasks.map((task) => {
+                      const status = statusBadges[task.status] || statusBadges.TODO
+                      const priority = priorityBadges[task.priority] || priorityBadges.MEDIUM
+                      return (
+                        <tr key={task.id}>
+                          <td><Link to={`/tasks/${task.id}`} style={{ textDecoration: 'none', color: 'inherit', fontWeight: 600 }}>{task.title}</Link></td>
+                          <td>{task.project?.name || '-'}</td>
+                          <td>
+                            <span className="b-status" style={{ background: status.bg, color: status.color }}>
+                              {status.text}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="b-priority" style={{ background: priority.bg, color: priority.color }}>
+                              {priority.text}
+                            </span>
+                          </td>
+                          <td>{task.dueDate ? new Date(task.dueDate).toLocaleDateString('vi-VN') : '-'}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <Link to={`/tasks/${task.id}`} className="btn btn-sm btn-outline-primary" style={{ fontSize: '12px' }}>Xem</Link>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="pagination-container">
+                {renderPaginationButtons()}
+              </div>
+              <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: '#64748b' }}>
+                Trang {page + 1} / {totalPages} (Tổng: {totalElements} công việc)
+              </div>
+            </>
           )}
         </div>
       </div>

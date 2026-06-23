@@ -1,7 +1,7 @@
 import axiosInstance from './axiosInstance'
 
 const projectService = {
-  // Get all projects for current user
+  // Get all projects for current user with pagination
   getProjects: (params = {}) =>
     axiosInstance.get('/projects', { params }).then(res => res.data),
 

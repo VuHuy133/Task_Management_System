@@ -5,6 +5,7 @@ import com.trello.entity.*;
 import com.trello.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ public class DataSeederService {
     private final ProjectRepository projectRepository;
     private final TaskRepository taskRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final PasswordEncoder passwordEncoder;
 
     private final Faker faker = new Faker(Locale.US);
 
@@ -119,10 +121,10 @@ public class DataSeederService {
             } while (usedEmails.contains(email));
             usedEmails.add(email);
 
-            User user = User.builder()
+                User user = User.builder()
                     .username(username)
                     .email(email)
-                    .password("$2a$10$m9VrKjvWBZr.2Ui7.tqH9uLhYYVQbfWR.03f5s3NlP3s4x3EQbPRK") // BCrypt hash của "123456"
+                    .password(passwordEncoder.encode("123456"))
                     .name(faker.name().fullName())
                     .address(faker.address().fullAddress())
                     .role(i == 0 ? "ADMIN" : "USER") // First user is ADMIN
@@ -269,5 +271,55 @@ public class DataSeederService {
         stats.put("total_project_members", projectMemberRepository.count());
         stats.put("total_tasks", taskRepository.count());
         return stats;
+    }
+
+    /**
+     * Reset password cho tất cả user thành "123456"
+     * Dùng khi đã đổ dữ liệu và muốn thay đổi password
+     */
+    public Map<String, Object> resetAllUserPasswords() {
+        return resetAllUserPasswords("123456");
+    }
+
+    /**
+     * Reset password cho tất cả user thành mật khẩu được cung cấp
+     * @param newPassword mật khẩu mới
+     */
+    public Map<String, Object> resetAllUserPasswords(String newPassword) {
+        try {
+            List<User> users = userRepository.findAll();
+            int updatedCount = 0;
+
+            log.info("=== Starting Password Reset for {} users ===", users.size());
+            long startTime = System.currentTimeMillis();
+
+            for (User user : users) {
+                String encodedPassword = passwordEncoder.encode(newPassword);
+                user.setPassword(encodedPassword);
+                updatedCount++;
+
+                if (updatedCount % 100 == 0) {
+                    log.debug("Updated password for {} users", updatedCount);
+                }
+            }
+
+            userRepository.saveAll(users);
+
+            long duration = (System.currentTimeMillis() - startTime) / 1000;
+            log.info("=== Password Reset Completed for {} users in {} seconds ===", updatedCount, duration);
+
+            return Map.of(
+                "status", "SUCCESS",
+                "message", "Reset password cho tất cả " + updatedCount + " user thành '" + newPassword + "'",
+                "updated_count", updatedCount,
+                "duration_seconds", duration
+            );
+        } catch (Exception e) {
+            log.error("Error during password reset", e);
+            return Map.of(
+                "status", "ERROR",
+                "message", e.getMessage()
+            );
+        }
     }
 }

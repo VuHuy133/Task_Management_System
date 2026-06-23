@@ -17,9 +17,10 @@ public class CorsConfig {
                         .allowedOrigins("http://localhost:3000", "http://localhost:5173")
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                         .allowedHeaders("*")
-                        // Expose headers để React đọc được Authorization và X-Refresh-Token
-                        .exposedHeaders("Authorization", "X-Refresh-Token")
-                        .allowCredentials(false);
+                        // Expose headers để React đọc được Authorization
+                        .exposedHeaders("Authorization")
+                        // Bật allowCredentials để browser gửi httpOnly Cookie tự động
+                        .allowCredentials(true);
             }
         };
     }

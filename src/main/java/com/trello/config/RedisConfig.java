@@ -32,7 +32,9 @@ public class RedisConfig implements CachingConfigurer {
 
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
-        return new LettuceConnectionFactory(redisHost, redisPort);
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(redisHost, redisPort);
+        log.info("Creating Redis Connection Factory: {}:{}", redisHost, redisPort);
+        return factory;
     }
 
     @Bean
@@ -51,6 +53,8 @@ public class RedisConfig implements CachingConfigurer {
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
         StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory(connectionFactory);
+        template.afterPropertiesSet();
+        log.info("StringRedisTemplate initialized successfully");
         return template;
     }
 

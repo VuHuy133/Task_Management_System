@@ -13,7 +13,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.util.Arrays;
 import java.util.Optional;
 
 @RestController
@@ -75,49 +79,55 @@ public class AuthController {
      * User login endpoint
      */
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<?>> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<ApiResponse<?>> login(@Valid @RequestBody LoginRequest request,
+                                                HttpServletResponse response) {
         try {
             // Find user by email
             Optional<User> userOpt = userService.getUserByEmail(request.getEmail());
 
             if (!userOpt.isPresent()) {
-                ApiResponse<?> response = ApiResponse.builder()
+                ApiResponse<?> apiResponse = ApiResponse.builder()
                         .success(false)
                         .message("Email hoặc mật khẩu không chính xác")
                         .statusCode(HttpStatus.UNAUTHORIZED.value())
                         .build();
-                return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
+                return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
             }
 
             User user = userOpt.get();
 
             // Validate password
             if (!userService.validatePassword(request.getPassword(), user.getPassword())) {
-                ApiResponse<?> response = ApiResponse.builder()
+                ApiResponse<?> apiResponse = ApiResponse.builder()
                         .success(false)
                         .message("Email hoặc mật khẩu không chính xác")
                         .statusCode(HttpStatus.UNAUTHORIZED.value())
                         .build();
-                return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
+                return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
             }
 
-            // Generate Access Token (24h)
-            String accessToken = jwtTokenProvider.generateAccessToken(user.getId().toString());
-            long accessTokenTtl = jwtTokenProvider.getTokenExpirationInSeconds(accessToken);
-            System.out.println("DEBUG: Generated access token TTL: " + accessTokenTtl + " seconds");
 
-            // Save access token vào Redis (active)
-            tokenBlacklistService.saveActiveToken(
-                    accessToken, user.getId().toString(), accessTokenTtl);
+            // Generate Access Token 
+            String accessToken = jwtTokenProvider.generateAccessToken(user.getId().toString(), user.getRole());
+            long accessTokenTtl = jwtTokenProvider.getTokenExpirationInSeconds(accessToken);
+
+            // Save access token vào Redis IMMEDIATELY without delay
+            tokenBlacklistService.saveActiveToken(accessToken, user.getId().toString(), accessTokenTtl);
 
             // Generate Refresh Token (30 days)
             String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId().toString());
             long refreshTokenTtl = jwtTokenProvider.getTokenExpirationInSeconds(refreshToken);
-            System.out.println("DEBUG: Generated refresh token TTL: " + refreshTokenTtl + " seconds");
 
-            // Save refresh token vào Redis (refresh)
-            tokenBlacklistService.saveRefreshToken(
-                    refreshToken, user.getId().toString(), refreshTokenTtl);
+            // Save refresh token vào Redis IMMEDIATELY without delay
+            tokenBlacklistService.saveRefreshToken(refreshToken, user.getId().toString(), refreshTokenTtl);
+
+            // Gửi refresh token qua httpOnly Cookie (Session - không thể bị XSS đọc)
+            Cookie refreshCookie = new Cookie("refreshToken", refreshToken);
+            refreshCookie.setHttpOnly(true);
+            refreshCookie.setSecure(false); // Đổi thành true khi deploy HTTPS
+            refreshCookie.setPath("/api/auth");
+            refreshCookie.setMaxAge((int) refreshTokenTtl);
+            response.addCookie(refreshCookie);
 
             UserResponse userResponse = UserResponse.builder()
                     .id(user.getId())
@@ -127,31 +137,29 @@ public class AuthController {
                     .createdAt(user.getCreatedAt())
                     .build();
 
-            // Response with tokens in body (stateless - React đọc từ body và lưu vào localStorage)
-            ApiResponse<?> response = ApiResponse.builder()
+            // Response: access token trong body, refresh token đã được set vào httpOnly Cookie
+            ApiResponse<?> apiResponse = ApiResponse.builder()
                     .success(true)
                     .message("Đăng nhập thành công")
                     .statusCode(HttpStatus.OK.value())
                     .data(java.util.Map.of(
                         "user", userResponse,
                         "accessToken", accessToken,
-                        "refreshToken", refreshToken,
                         "expiresIn", accessTokenTtl
                     ))
                     .build();
 
             return ResponseEntity.ok()
                     .header("Authorization", "Bearer " + accessToken)
-                    .header("X-Refresh-Token", refreshToken)
-                    .body(response);
+                    .body(apiResponse);
 
         } catch (Exception e) {
-            ApiResponse<?> response = ApiResponse.builder()
+            ApiResponse<?> apiResponse = ApiResponse.builder()
                     .success(false)
                     .message("Lỗi khi đăng nhập: " + e.getMessage())
                     .statusCode(HttpStatus.INTERNAL_SERVER_ERROR.value())
                     .build();
-            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -162,15 +170,26 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<?>> logout(
             @RequestHeader(value = "Authorization", required = false) String token,
-            @RequestParam(value = "refreshToken", required = false) String refreshToken) {
+            HttpServletRequest request,
+            HttpServletResponse response) {
+
+        // Đọc refresh token từ httpOnly Cookie (Session)
+        String refreshToken = null;
+        if (request.getCookies() != null) {
+            refreshToken = Arrays.stream(request.getCookies())
+                    .filter(c -> "refreshToken".equals(c.getName()))
+                    .map(Cookie::getValue)
+                    .findFirst()
+                    .orElse(null);
+        }
         // Validate access token
         if (token == null || !token.startsWith("Bearer ")) {
-            ApiResponse<?> response = ApiResponse.builder()
+            ApiResponse<?> apiResponse = ApiResponse.builder()
                     .success(false)
                     .message("Access token không hợp lệ hoặc không được cung cấp")
                     .statusCode(HttpStatus.UNAUTHORIZED.value())
                     .build();
-            return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
+            return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
         }
 
         try {
@@ -178,12 +197,12 @@ public class AuthController {
             
             // Validate access token
             if (!jwtTokenProvider.validateToken(accessToken)) {
-                ApiResponse<?> response = ApiResponse.builder()
+                ApiResponse<?> apiResponse = ApiResponse.builder()
                         .success(false)
                         .message("Access token hết hạn hoặc không hợp lệ")
                         .statusCode(HttpStatus.UNAUTHORIZED.value())
                         .build();
-                return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
+                return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
             }
 
             // Đưa access token vào blacklist Redis
@@ -200,22 +219,30 @@ public class AuthController {
                 }
             }
 
+            // Xóa httpOnly Cookie (Session) trên client
+            Cookie expiredCookie = new Cookie("refreshToken", "");
+            expiredCookie.setHttpOnly(true);
+            expiredCookie.setSecure(false);
+            expiredCookie.setPath("/api/auth");
+            expiredCookie.setMaxAge(0);
+            response.addCookie(expiredCookie);
+
             // Logout successful
-            ApiResponse<?> response = ApiResponse.builder()
+            ApiResponse<?> logoutResponse = ApiResponse.builder()
                     .success(true)
                     .message("Đăng xuất thành công")
                     .statusCode(HttpStatus.OK.value())
                     .build();
             
-            return new ResponseEntity<>(response, HttpStatus.OK);
+            return new ResponseEntity<>(logoutResponse, HttpStatus.OK);
 
         } catch (Exception e) {
-            ApiResponse<?> response = ApiResponse.builder()
+            ApiResponse<?> apiResponse = ApiResponse.builder()
                     .success(false)
                     .message("Lỗi khi đăng xuất: " + e.getMessage())
                     .statusCode(HttpStatus.INTERNAL_SERVER_ERROR.value())
                     .build();
-            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -226,42 +253,48 @@ public class AuthController {
      */
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<?>> refreshAccessToken(
-            @RequestParam(value = "refreshToken") String refreshToken) {
-        
+            HttpServletRequest request) {
+
+        // Đọc refresh token từ httpOnly Cookie (Session)
+        String refreshToken = null;
+        if (request.getCookies() != null) {
+            refreshToken = Arrays.stream(request.getCookies())
+                    .filter(c -> "refreshToken".equals(c.getName()))
+                    .map(Cookie::getValue)
+                    .findFirst()
+                    .orElse(null);
+        }
+
         // Validate refresh token
         if (refreshToken == null || refreshToken.isEmpty()) {
-            ApiResponse<?> response = ApiResponse.builder()
+            ApiResponse<?> apiResponse = ApiResponse.builder()
                     .success(false)
-                    .message("Refresh token không được cung cấp")
-                    .statusCode(HttpStatus.BAD_REQUEST.value())
+                    .message("Refresh token không tồn tại trong session, vui lòng đăng nhập lại")
+                    .statusCode(HttpStatus.UNAUTHORIZED.value())
                     .build();
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+            return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
         }
 
         try {
-            // Validate refresh token format
-            if (refreshToken.startsWith("Bearer ")) {
-                refreshToken = refreshToken.substring(7);
-            }
 
             // Check in blacklist
             if (tokenBlacklistService.isRefreshTokenBlacklisted(refreshToken)) {
-                ApiResponse<?> response = ApiResponse.builder()
+                ApiResponse<?> apiResponse = ApiResponse.builder()
                         .success(false)
                         .message("Refresh token đã bị logout, vui lòng login lại")
                         .statusCode(HttpStatus.UNAUTHORIZED.value())
                         .build();
-                return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
+                return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
             }
 
             // Validate refresh token
             if (!jwtTokenProvider.validateToken(refreshToken)) {
-                ApiResponse<?> response = ApiResponse.builder()
+                ApiResponse<?> apiResponse = ApiResponse.builder()
                         .success(false)
                         .message("Refresh token hết hạn hoặc không hợp lệ")
                         .statusCode(HttpStatus.UNAUTHORIZED.value())
                         .build();
-                return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
+                return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
             }
 
             // Extract user ID from refresh token
@@ -270,47 +303,48 @@ public class AuthController {
             // Verify refresh token in Redis
             String storedRefreshToken = tokenBlacklistService.getRefreshToken(userId);
             if (storedRefreshToken == null || !storedRefreshToken.equals(refreshToken)) {
-                ApiResponse<?> response = ApiResponse.builder()
+                ApiResponse<?> apiResponse = ApiResponse.builder()
                         .success(false)
                         .message("Refresh token không khớp với token lưu trong Redis")
                         .statusCode(HttpStatus.UNAUTHORIZED.value())
                         .build();
-                return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
+                return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
             }
 
-            // Generate new access token (keep refresh token)
-            String newAccessToken = jwtTokenProvider.generateAccessToken(userId);
+
+            // Lấy user từ DB để lấy role
+            User user = userService.getUserById(Long.valueOf(userId));
+            // Generate new access token (keep refresh token) with role
+            String newAccessToken = jwtTokenProvider.generateAccessToken(userId, user.getRole());
             long newAccessTokenTtl = jwtTokenProvider.getTokenExpirationInSeconds(newAccessToken);
 
             // Save new access token to Redis active
             tokenBlacklistService.saveActiveToken(newAccessToken, userId, newAccessTokenTtl);
             
             // Do NOT generate new refresh token (reuse pattern)
-            // Just return the new access token with old refresh token
+            // Refresh token is in httpOnly cookie, don't return in body
 
-            ApiResponse<?> response = ApiResponse.builder()
+            ApiResponse<?> apiResponse = ApiResponse.builder()
                     .success(true)
                     .message("Refresh token thành công, access token mới được cấp")
                     .statusCode(HttpStatus.OK.value())
                     .data(java.util.Map.of(
                         "accessToken", newAccessToken,
-                        "refreshToken", refreshToken,  // Return original refresh token
                         "expiresIn", newAccessTokenTtl
                     ))
                     .build();
 
             return ResponseEntity.ok()
                     .header("Authorization", "Bearer " + newAccessToken)
-                    .header("X-Refresh-Token", refreshToken)
-                    .body(response);
+                    .body(apiResponse);
 
         } catch (Exception e) {
-            ApiResponse<?> response = ApiResponse.builder()
+            ApiResponse<?> apiResponse = ApiResponse.builder()
                     .success(false)
                     .message("Lỗi khi refresh token: " + e.getMessage())
                     .statusCode(HttpStatus.INTERNAL_SERVER_ERROR.value())
                     .build();
-            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

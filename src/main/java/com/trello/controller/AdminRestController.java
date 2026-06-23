@@ -310,4 +310,25 @@ public class AdminRestController {
             "timestamp", LocalDateTime.now()
         ));
     }
+
+    /**
+     * POST /api/admin/reset-passwords - Reset password cho tất cả user về "123456"
+     * Dùng khi đã đổ dữ liệu và muốn reset password về mặc định
+     */
+    @PostMapping("/reset-passwords")
+    public ResponseEntity<ApiResponse<?>> resetAllPasswords() {
+        Map<String, Object> result = dataSeederService.resetAllUserPasswords();
+        boolean success = "SUCCESS".equals(result.get("status"));
+        
+        ApiResponse<?> response = ApiResponse.builder()
+                .success(success)
+                .message((String) result.get("message"))
+                .statusCode(success ? HttpStatus.OK.value() : HttpStatus.INTERNAL_SERVER_ERROR.value())
+                .data(result)
+                .build();
+        
+        return success ? ResponseEntity.ok(response) : 
+               new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
 }

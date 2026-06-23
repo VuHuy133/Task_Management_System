@@ -5,6 +5,8 @@ const axiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Bật withCredentials để browser tự động gửi httpOnly Cookie khi refresh/logout
+  withCredentials: true,
 })
 
 // -------------------------------------------------------
@@ -42,13 +44,12 @@ axiosInstance.interceptors.response.use(
       }
 
       try {
-        const res = await axios.post(`/api/auth/refresh?refreshToken=${refreshToken}`)
-        const { accessToken, refreshToken: newRefreshToken } = res.data.data
+        // Gọi refresh - browser tự động gửi httpOnly Cookie (không cần truyền refreshToken thủ công)
+        const res = await axios.post('/api/auth/refresh', {}, { withCredentials: true })
+        const { accessToken } = res.data.data
 
         localStorage.setItem('accessToken', accessToken)
-        if (newRefreshToken) {
-          localStorage.setItem('refreshToken', newRefreshToken)
-        }
+        // Refresh token được server cập nhật qua Cookie tự động, không cần lưu localStorage
 
         // Retry request gốc với token mới
         originalRequest.headers['Authorization'] = `Bearer ${accessToken}`

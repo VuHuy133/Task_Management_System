@@ -127,7 +127,7 @@ export default function LoginPage() {
             </div>
 
             {/* Google OAuth2 */}
-            <a href="http://localhost:8080/oauth2/authorization/google" className={styles.btnGoogle}>
+            <a href="http://localhost:8088/oauth2/authorization/google" className={styles.btnGoogle}>
               <i className="fab fa-google"></i>Continue with Google
             </a>
 
